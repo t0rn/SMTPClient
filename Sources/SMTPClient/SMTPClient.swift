@@ -3,9 +3,11 @@ import Network
 
 open class SMTPClient {
     public typealias ConnectionState = String
+    public typealias ResponseHandler = ((Content, SMTPCommand) throws -> Response)
     
     public let queue: DispatchQueue
     private let connection: NWConnection
+    private let responseHandler: ResponseHandler
     
     public private(set) lazy var connectionState: some AsyncSequence = {
         connection
@@ -17,24 +19,31 @@ open class SMTPClient {
     
     public init(
         connection: NWConnection,
-        queue: DispatchQueue
+        queue: DispatchQueue,
+        responseHandler: @escaping ResponseHandler = SMTPClient.defaultContentHandler(content:command:)
     ) {
         self.connection = connection
         self.queue = queue
+        self.responseHandler = responseHandler
     }
     
     public convenience init(
         host: String,
         port: Int,
         parameters: NWParameters = .TLSv12,
-        queue: DispatchQueue = DispatchQueue(label: "com.SMTPClient.connectionQ")
+        queue: DispatchQueue = DispatchQueue(label: "com.SMTPClient.connectionQ"),
+        responseHandler: @escaping ResponseHandler = SMTPClient.defaultContentHandler(content:command:)
     ) {
         let connection = NWConnection(
             host: NWEndpoint.Host(host),
             port: NWEndpoint.Port(rawValue: UInt16(port))!,
             using: parameters
         )
-        self.init(connection: connection, queue: queue)
+        self.init(
+            connection: connection,
+            queue: queue,
+            responseHandler: responseHandler
+        )
     }
     
     open func connect() {
@@ -66,11 +75,7 @@ open class SMTPClient {
     throws -> Response
     where Command: SMTPCommand
     {
-        let response = try Response(content)
-        guard response.statusCode.isPositive else {
-            throw Response.ValidationError.invalidStatusCode
-        }
-        return response
+        try responseHandler(content, command)
     }
     
     open func send(
@@ -113,5 +118,19 @@ open class SMTPClient {
     open func disconnect() {
         guard connection.state != .cancelled else { return }
         connection.forceCancel()
+    }
+}
+
+public extension SMTPClient {
+    class func defaultContentHandler(
+        content: Content,
+        command: SMTPCommand
+    )
+    throws -> Response {
+        let response = try Response(content)
+        guard response.statusCode.isPositive else {
+            throw Response.ValidationError.invalid(response: response, command: command)
+        }
+        return response
     }
 }

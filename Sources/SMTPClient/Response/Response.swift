@@ -38,7 +38,7 @@ public extension Response {
 
 public extension Response {
     enum ValidationError: Error {
-        case invalidStatusCode
+        case invalid(response: Response, command: SMTPCommand)
     }
 }
 
