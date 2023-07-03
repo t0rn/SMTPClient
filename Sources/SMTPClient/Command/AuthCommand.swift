@@ -31,7 +31,7 @@ public struct AuthPassword: SMTPCommand, Respondable {
         Data(password.utf8).base64EncodedString()
     }
     
-    init(password: String) {
+    public init(password: String) {
         self.password = password
     }
 }
